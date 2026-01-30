@@ -1,0 +1,18 @@
+# --- Linux C 專案部分 ---
+serial_logger
+test_runner
+*.o
+*.out
+
+# --- STM32 專案部分 (最重要！) ---
+# 忽略 CubeIDE 編譯出來的垃圾資料夾
+firmware/**/Debug/
+firmware/**/Release/
+firmware/**/Settings/
+
+# --- 編輯器設定 ---
+.vscode/
+
+# --- 其他系統垃圾 (預防萬一) ---
+.DS_Store
+*.exe
