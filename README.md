@@ -5,6 +5,9 @@
 系統由 **STM32 (Firmware)** 負責硬體監控與 PWM 風扇模擬，並透過 USB (Virtual COM Port) 與 **Linux Host** 進行通訊。
 Linux 端實作了 User-space Driver，負責解析二進位封包、執行熱控策略 (Thermal Policy)，並透過閉迴路機制控制硬體。
 
+## 🏗️ System Architecture
+![System Architecture Diagram](docs/architecture.png)
+
 ## 🛠️ Tech Stack
 * **Hardware**: STM32F4 Nucleo (UART, ADC, TIM PWM, GPIO)
 * **OS / Environment**: Linux (Ubuntu on WSL2)
@@ -28,15 +31,6 @@ Linux 端實作了 User-space Driver，負責解析二進位封包、執行熱�
 * `linux_app/`: Linux C driver and application logic.
 * `tests/`: Unit tests for protocol parsing logic.
 
-## 📸 Demo
-### 1. Thermal Control Logic (Linux Host)
-![Run Demo](docs/demo_run_overheat.png)
-*Linux detects overheat and sends cooling command to STM32.*
-
-### 2. Unit Test Verification
-![Unit Test](docs/unit_test_pass.png)
-*Protocol parser logic verified with mock data.*
-
 ## 🔧 How to Run
 1.  **Build the Linux App**:
     ```bash
@@ -53,3 +47,15 @@ Linux 端實作了 User-space Driver，負責解析二進位封包、執行熱�
     gcc test_parser.c ../linux_app/parser.c -o test_runner
     ./test_runner
     ```
+
+## 💡 Technical Highlights
+* **Raw Mode UART Communication**
+  Configured Linux Termios in raw mode to ensure binary data transmission without OS-level interference.
+* **Robust Protocol Parser**
+  Implemented header validation and checksum verification to prevent data corruption caused by UART noise.
+* **Mock-based Unit Testing**
+  Designed unit tests for protocol parsing logic, enabling hardware-independent verification and CI/CD integration.
+
+## 🚀 Future Roadmap
+* **Kernel-space Driver Migration**
+  Currently, UART communication is handled in user space for rapid development and debugging. Future plans include migrating the core communication logic into a Linux kernel-space character device driver, leveraging interrupt-driven I/O to reduce CPU usage and improve system scalability.
