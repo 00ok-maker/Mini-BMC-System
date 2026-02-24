@@ -2,7 +2,7 @@
 #include <string.h>
 #include "parser.h"  // 引入我們要測試的大腦
 
-// 這是我們自己寫的簡單測試工具
+// 這是簡單的測試工具
 void run_test(const char* test_name, int expected_result, int actual_result) {
     if (expected_result == actual_result) {
         printf("[PASS] %s\n", test_name);

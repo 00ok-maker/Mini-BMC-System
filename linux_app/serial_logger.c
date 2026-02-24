@@ -9,41 +9,41 @@
 #include <signal.h>
 #include "parser.h"
 
-// <--- 2. 新增這個控制旗標
+// <--- 2. 新增這個控制旗標flag
 // volatile 代表「隨時可能被外部(中斷)改變」，告訴編譯器不要優化它
 volatile sig_atomic_t keep_running = 1;
 
-// <--- 3. 新增訊號處理函式 (Handler)
+// <--- 3. 新增訊號處理函式 (Handler)，安全關機
 void handle_sigint(int sig) {
     (void)sig; // 消除 "unused parameter" 警告
     keep_running = 0; // 把旗標降下來，準備結束
     printf("\n\n>>> [System] Caught signal (Ctrl+C). Shutting down safely...\n");
 }
 
-// 設定 Serial Port 的魔法函式 (Linux 標準寫法)
+// 設定 Serial Port 的函式 (Linux 標準寫法)
 int configure_serial(int fd) {
     struct termios tty;
     if (tcgetattr(fd, &tty) != 0) {
         printf("Error from tcgetattr: %s\n", strerror(errno));
         return -1;
     }
-
-    cfsetospeed(&tty, B115200); // 設定速度 115200
-    cfsetispeed(&tty, B115200);
-
+    // 設定波特率速度 115200
+    cfsetospeed(&tty, B115200); // 輸出 (Output) 速度
+    cfsetispeed(&tty, B115200); // 輸入 (Input) 速度
+    //8N1
     tty.c_cflag &= ~PARENB;     // No Parity
     tty.c_cflag &= ~CSTOPB;     // 1 Stop bit
-    tty.c_cflag &= ~CSIZE;
-    tty.c_cflag |= CS8;         // 8 Bits
-    tty.c_cflag &= ~CRTSCTS;    // No Hardware Flow Control
+    tty.c_cflag &= ~CSIZE;      //「資料長度」的設定歸零
+    tty.c_cflag |= CS8;         // 設定8 Bits
+    tty.c_cflag &= ~CRTSCTS;    // No Hardware 沒有接 RTS/CTS
     tty.c_cflag |= CREAD | CLOCAL; // Turn on READ & ignore ctrl lines
 
     // 重要：設定為 Raw Mode (讀什麼就是什麼，不要幫我處理換行符號)
-    tty.c_lflag &= ~ICANON;
-    tty.c_lflag &= ~ECHO;
+    tty.c_lflag &= ~ICANON;     //非標準模式 (Non-canonical mode)
+    tty.c_lflag &= ~ECHO;       //防止回授 (Loopback)
     tty.c_lflag &= ~ECHOE;
     tty.c_lflag &= ~ECHONL;
-    tty.c_lflag &= ~ISIG;
+    tty.c_lflag &= ~ISIG;       //關掉 ISIG 是為了防止 特殊字元干擾
     
     tty.c_iflag &= ~(IXON | IXOFF | IXANY); // Disable Software Flow Control
     tty.c_iflag &= ~(IGNBRK|BRKINT|PARMRK|ISTRIP|INLCR|IGNCR|ICRNL);
@@ -52,8 +52,8 @@ int configure_serial(int fd) {
     tty.c_oflag &= ~ONLCR; 
 
     // 設定讀取超時 (Blocking read)
-    tty.c_cc[VTIME] = 10;    // Wait for up to 1s
-    tty.c_cc[VMIN] = 0;
+    tty.c_cc[VTIME] = 10;    // 等待 1.0 秒 (單位是 0.1秒)
+    tty.c_cc[VMIN] = 0;      //只要有資料就回傳，不用等到收滿幾個字
 
     if (tcsetattr(fd, TCSANOW, &tty) != 0) {
         printf("Error from tcsetattr: %s\n", strerror(errno));
@@ -63,7 +63,7 @@ int configure_serial(int fd) {
 }
 
 int main() {
-    // 注意：如果你是用 WSL 透過 usbipd 連線，通常是 /dev/ttyACM0
+    // 用 WSL 透過 usbipd 連線，通常是 /dev/ttyACM0
     char *portname = "/dev/ttyACM0";
     int fd = open(portname, O_RDWR | O_NOCTTY | O_SYNC);
     

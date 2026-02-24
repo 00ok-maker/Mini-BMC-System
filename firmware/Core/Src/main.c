@@ -54,7 +54,9 @@ typedef struct __attribute__((packed)) {
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-uint8_t rx_byte; // 用來存收到的一個 byte
+uint8_t duty_cycle = 0; // 測試變數 duyt_cycle 是佔空比(亮度or轉速)
+int8_t step = 1;        //step 是步伐(每一次加多少)用於控制duyt_cycle
+uint8_t rx_byte;        // 用來存收到的一個 byte
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -102,22 +104,18 @@ int main(void)
   MX_ADC1_Init();
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
-
   // 1. 啟動 PWM (控制 LED)
     HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
 
-    // 2. 啟動 ADC (準備讀溫度，雖然這段 Code 還沒用到，先開起來)
-    HAL_ADC_Start(&hadc1);
+  // 2. 啟動 ADC (讀溫度，先開起來)
+  HAL_ADC_Start(&hadc1);
 
-    // ▼▼▼▼▼ 新增這一行：啟動接收中斷 ▼▼▼▼▼
-      HAL_UART_Receive_IT(&huart2, &rx_byte, 1);
-      // ▲▲▲▲▲ 告訴 MCU：準備收 1 個 byte，收到後存在 rx_byte
+  // 啟動接收中斷，告訴 MCU：準備收 1 個 byte，收到後存在 rx_byte
+  HAL_UART_Receive_IT(&huart2, &rx_byte, 1);
 
-    // 測試變數
-    uint8_t duty_cycle = 0;
-    int8_t step = 1;
-    //char msg[] = "BMC Alive\r\n";
-
+  // 測試 BMC 是否活著
+  // char msg[] = "BMC Alive\r\n";
+  // HAL_UART_Transmit(&huart2, (uint8_t*)msg, sizeof(msg)-1, 100);
 
   /* USER CODE END 2 */
 
@@ -128,31 +126,27 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  /* USER CODE BEGIN 3 */
-	      // --- 1. 呼吸燈 (維持原樣) ---
-	      __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, duty_cycle);
-	      duty_cycle += step;
-	      if (duty_cycle >= 100 || duty_cycle <= 0) step = -step;
+	  // --- 1. 呼吸燈 PWM ---
+	  __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, duty_cycle);
+	  duty_cycle += step;
+	  if (duty_cycle >= 100 || duty_cycle <= 0) step = -step;
 
-	      // --- 2. 準備封包 (這是新的!) ---
-	      BmcPacket tx_packet;
-	      tx_packet.header = 0xAA;      // 這是我們約定好的開頭
-	      tx_packet.cmd    = 0x01;      // 0x01 代表這是「溫度資料」
-	      tx_packet.len    = 0x01;      // 資料長度 1 byte
+	  // --- 2. 準備封包 ---
+	  BmcPacket tx_packet;
+	  tx_packet.header = 0xAA;      // 定義的開頭識別碼
+	  tx_packet.cmd    = 0x01;      // 0x01 代表這是「溫度資料」
+	  tx_packet.len    = 0x01;      // 資料長度 1 byte
+	  // 這裡用 duty_cycle 當作假溫度(0~100度)，會看到溫度隨著燈光亮度一起變
+	  tx_packet.data   = duty_cycle;
+	  // 計算檢查碼
+	  tx_packet.checksum = calculate_checksum(&tx_packet);
 
-	      // 這裡我們用 duty_cycle 當作假溫度 (0~100度)
-	      // 這樣你會看到溫度隨著燈光亮度一起變！
-	      tx_packet.data   = duty_cycle;
+	  // --- 3. 發送二進位封包 ---
+	  // 注意轉型 (uint8_t*)，我們要送原始的byte
+	  HAL_UART_Transmit(&huart2, (uint8_t*)&tx_packet, sizeof(BmcPacket), 10);
 
-	      // 計算檢查碼
-	      tx_packet.checksum = calculate_checksum(&tx_packet);
-
-	      // --- 3. 發送二進位封包 ---
-	      // 注意轉型 (uint8_t*)，我們要送原始的 byte
-	      HAL_UART_Transmit(&huart2, (uint8_t*)&tx_packet, sizeof(BmcPacket), 10);
-
-	      // --- 4. 變慢一點，方便觀察 (改成 500ms 或 1000ms) ---
-	      HAL_Delay(100);
+	  // --- 4. Delay變慢一點，方便觀察(改成 500ms 或 1000ms)，這裡設定0.1秒---
+	  HAL_Delay(100);
   }
   /* USER CODE END 3 */
 }
@@ -204,25 +198,24 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-// 這是 HAL 庫標準的接收完成回調函式
+//這是 HAL 庫標準的接收完成回調函式
+//當硬體真的收到資料（中斷發生）時，CPU 會暫停手邊的工作，跳進來執行這個函式。
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-  if (huart->Instance == USART2) // 確認是來自 USART2
+  if (huart->Instance == USART2) // 確認是否來自 USART2
   {
     // 如果收到 'R' (Reset)，就把亮度歸零
     if (rx_byte == 'R' || rx_byte == 'r') {
-        // 這裡我們存取全域變數 duty_cycle 需要宣告 extern 或移到上面
-        // 為了簡單，我們直接歸零計數器就好，反正 main loop 會用它
-        // 注意：正規寫法應該要把 duty_cycle 變成全域變數，這裡暫時用作弊法：
-        // 我們直接重設 TIM2 的 Counter，讓它感覺像閃了一下
+    	duty_cycle = 0; //歸零佔空比
+    	step = 1; // 順便確保方向是「變亮」
+        // 直接重設 TIM2 的 Counter，把計數器歸零
         __HAL_TIM_SET_COUNTER(&htim2, 0);
     }
-
-    // 收到指令後，要「再次啟動」監聽，不然下次就不會理你了
+    // 收到指令後，要「再次啟動」。
     HAL_UART_Receive_IT(&huart2, &rx_byte, 1);
   }
 }
-// 計算 Checksum 的函式 (簡單 XOR 演算法)
+// 計算 Checksum 的函式 ( XOR 演算法)
 uint8_t calculate_checksum(BmcPacket *pkt) {
     // 算法：Header ^ Cmd ^ Len ^ Data
     return (pkt->header ^ pkt->cmd ^ pkt->len ^ pkt->data);

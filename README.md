@@ -5,8 +5,14 @@
 系統由 **STM32 (Firmware)** 負責硬體監控與 PWM 風扇模擬，並透過 USB (Virtual COM Port) 與 **Linux Host** 進行通訊。
 Linux 端實作了 User-space Driver，負責解析二進位封包、執行熱控策略 (Thermal Policy)，並透過閉迴路機制控制硬體。
 
-## 🏗️ System Architecture
+## 🏗️ System Architecture & Hardware Setup
 ![System Architecture Diagram](docs/architecture.png)
+![STM32 與 Ubuntu 跨平台 BMC 溫度監控系統實測](docs/stm32_ubuntu_bmc_demo.jpg)
+【系統實測展示】
+
+Device 端 (前景)：STM32F4 開發板，負責擷取硬體感測數據，並執行 PWM 風扇控制。
+
+Host 端 (背景)：Ubuntu Linux 終端機，正透過 UART 接收封包，進行 Checksum 驗證後即時解析並顯示系統狀態。
 
 ## 🛠️ Tech Stack
 * **Hardware**: STM32F4 Nucleo (UART, ADC, TIM PWM, GPIO)

@@ -2,7 +2,7 @@
 
 // 這裡我們只做純邏輯判斷
 int parse_packet(uint8_t *buffer, int length, BmcPacket *out_packet) {
-    // 1. 檢查長度夠不夠
+    // 1. 檢查長度
     if (length < sizeof(BmcPacket)) {
         return 0;
     }
